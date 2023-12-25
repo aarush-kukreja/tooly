@@ -63,9 +63,8 @@ def get_required_tools(query: str) -> List[str]:
     for line in content.split('\n'):
         line = line.strip()
         if line and not line.startswith(('Based on', 'This tool', 'These tools')):
-            # Only add valid tool names
-            if line in ['Calculator', 'WeatherTool', 'TimeTool', 'NoTool']:
-                tools.append(line)
+            # Add any tool name mentioned by the LLM
+            tools.append(line)
     
     return tools if tools else ["NoTool"]  # Default to NoTool if no valid tools found
 
