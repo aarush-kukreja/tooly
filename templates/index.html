@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Query Processor</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        form { margin-bottom: 20px; }
+        input[type="text"] { width: 70%; padding: 10px; }
+        input[type="submit"] { padding: 10px 20px; }
+        pre { background-color: #f0f0f0; padding: 10px; white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+    <h1>LLM Query Processor</h1>
+    <form method="post">
+        <input type="text" name="query" placeholder="Enter your query here" required>
+        <input type="submit" value="Submit">
+    </form>
+    {% if result %}
+    <h2>Result:</h2>
+    <h3>Reasoning:</h3>
+    <pre>{{ result.reasoning }}</pre>
+    <h3>Answer:</h3>
+    <pre>{{ result.answer }}</pre>
+    {% endif %}
+</body>
+</html>
