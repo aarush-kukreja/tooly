@@ -1,0 +1,23 @@
+# Vector database
+climate_db/
+
+# Virtual environment
+venv/
+
+# Python cache
+__pycache__/
+
+# Environment variables
+.env
+
+.venv
+.DS_Store
+*.txt
+*.png
+*.csv
+*.xlsx
+*.json
+*.txt
+*.csv
+*.xlsx
+*.json
