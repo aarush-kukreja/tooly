@@ -7,18 +7,40 @@
     <style>
         body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
         form { margin-bottom: 20px; }
-        input[type="text"] { width: 70%; padding: 10px; }
-        input[type="submit"] { padding: 10px 20px; }
+        input[type="text"] { width: 70%; padding: 10px; margin-bottom: 10px; }
+        input[type="submit"] { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        input[type="submit"]:hover { background-color: #45a049; }
         pre { background-color: #f0f0f0; padding: 10px; white-space: pre-wrap; word-wrap: break-word; }
         .step { margin-bottom: 15px; border: 1px solid #ddd; padding: 10px; border-radius: 5px; }
         .step-title { font-weight: bold; color: #333; }
         .step-details { margin-top: 5px; color: #666; }
+        .info-box { 
+            background-color: #f8f9fa; 
+            border-left: 4px solid #4CAF50; 
+            padding: 15px; 
+            margin: 20px 0; 
+            border-radius: 4px; 
+        }
+        .suggestion { 
+            color: #666; 
+            font-style: italic; 
+            margin: 5px 0; 
+            font-size: 0.9em; 
+        }
     </style>
 </head>
 <body>
     <h1>LLM Query Processor</h1>
+    
+    <div class="info-box">
+        <p><strong>About LLMs and Tool Usage:</strong></p>
+        <p>While Large Language Models (LLMs) excel at reasoning and natural language understanding, they can sometimes struggle with precise numerical calculations. This application demonstrates a more effective approach: using LLMs to coordinate specialized tools for specific tasks.</p>
+        <p>By combining the LLM's reasoning capabilities with purpose-built tools (like our Calculator), we can achieve more reliable and accurate results than relying on the LLM alone.</p>
+    </div>
+
     <form method="post">
         <input type="text" name="query" placeholder="Enter your task or query here" required>
+        <div class="suggestion">Try asking: "What is 235 * 18 + 442?" or "Calculate the square root of 169"</div>
         <input type="submit" value="Process">
     </form>
     {% if result %}

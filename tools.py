@@ -45,18 +45,44 @@ class ToolManager:
 
 class CalculatorTool:
     name = "Calculator"
-    description = ("Use this tool to perform basic arithmetic operations. "
-                   "Supported operations: addition (+), subtraction (-), "
-                   "multiplication (*), division (/), exponentiation (**), "
-                   "and modulo (%). Provide the expression as a string.")
+    description = ("Use this tool to perform basic arithmetic operations and functions. "
+                  "Supported operations: addition (+), subtraction (-), "
+                  "multiplication (*), division (/), exponentiation (**), "
+                  "modulo (%), and square root (sqrt). Provide the expression as a string.")
 
     @staticmethod
     def run(expression: str) -> float:
         try:
-            # Clean the expression
-            expression = expression.strip()
-            # Use a safe eval function to calculate the result
-            result = eval(expression, {"__builtins__": None}, {"math": math})
+            # Clean up the expression
+            expression = expression.lower().strip()
+            
+            # Handle square root specially
+            if "sqrt" in expression or "square root" in expression:
+                # Extract the number using regex
+                import re
+                numbers = re.findall(r'\d+', expression)
+                if numbers:
+                    number = float(numbers[0])
+                    return math.sqrt(number)
+                raise ValueError("No number found for square root calculation")
+            
+            # For other expressions, use safe eval
+            # Create a safe math context
+            safe_dict = {
+                "abs": abs,
+                "float": float,
+                "int": int,
+                "max": max,
+                "min": min,
+                "pow": pow,
+                "round": round,
+                "math": math
+            }
+            
+            # Clean up the expression to make it more eval-safe
+            expression = expression.replace("^", "**")
+            
+            result = eval(expression, {"__builtins__": None}, safe_dict)
             return float(result)
         except Exception as e:
             return f"Error: {str(e)}"

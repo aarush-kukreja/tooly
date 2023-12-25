@@ -50,7 +50,7 @@ def check_for_api_key_requirement(code: str) -> Dict[str, str]:
 
 def get_required_tools(query: str) -> List[str]:
     # For arithmetic operations, always return Calculator
-    if any(op in query.lower() for op in ['add', 'subtract', 'multiply', 'divide', 'compute', '+', '-', '*', '/']):
+    if any(op in query.lower() for op in ['add', 'subtract', 'multiply', 'divide', 'compute', '+', '-', '*', '/', 'sqrt', 'square root']):
         return ["Calculator"]
     
     # For other queries, ask the LLM
@@ -110,101 +110,94 @@ def construct_missing_tools(missing_tools: List[str]) -> Dict[str, str]:
     return None
 
 def use_tools(query: str, tools: List[str]) -> str:
-    result = query
-    tool_results = []
-    
     for tool_name in tools:
         tool_instance = tool_manager.get_tool(tool_name)
         if not tool_instance:
-            tool_results.append(f"Error: Tool '{tool_name}' is not available")
             continue
             
         try:
             # Handle Calculator tool specifically
             if tool_name == "Calculator":
+                # Extract numbers and basic operations
                 import re
-                numbers = re.findall(r'-?\d+\.?\d*', query)
-                operation = re.findall(r'[\+\-\*\/]', query)
-                if numbers and operation:
-                    expression = f"{numbers[0]}{operation[0]}{numbers[1]}"
+                # Clean up the query
+                clean_query = query.lower().replace('compute', '').replace('calculate', '').strip()
+                
+                # For square root
+                if "sqrt" in clean_query or "square root" in clean_query:
+                    return str(tool_instance.run(clean_query))
+                
+                # For basic arithmetic
+                # First, try to evaluate the entire expression
+                try:
+                    return str(tool_instance.run(clean_query))
+                except:
+                    # If that fails, try to parse it piece by piece
+                    numbers = re.findall(r'-?\d+\.?\d*', clean_query)
+                    operations = re.findall(r'[\+\-\*\/]', clean_query)
+                    
+                    if not numbers:
+                        return "Error: No numbers found in query"
+                    
+                    if len(numbers) == 1:
+                        return numbers[0]
+                    
+                    if not operations:
+                        return "Error: No operation found in query"
+                    
+                    expression = numbers[0]
+                    for i, op in enumerate(operations):
+                        if i + 1 < len(numbers):
+                            expression += f"{op}{numbers[i+1]}"
+                    
                     result = tool_instance.run(expression)
-                    if isinstance(result, str) and result.startswith("Error"):
-                        tool_results.append(f"Error using Calculator: {result}")
-                    else:
-                        return f"{numbers[0]} {operation[0]} {numbers[1]} = {result}"
-                else:
-                    tool_results.append("Error: Could not extract numbers and operation from query")
+                    return str(result)
             
             # Handle other tools
-            elif hasattr(tool_instance, 'run'):
-                try:
-                    result = tool_instance.run(query)  # Pass the original query
-                    if result:
-                        if isinstance(result, str) and result.startswith("Error"):
-                            tool_results.append(f"Error using {tool_name}: {result}")
-                        else:
-                            return str(result)
-                except Exception as e:
-                    tool_results.append(f"Error using {tool_name}: {str(e)}")
             else:
-                tool_results.append(f"Error: {tool_name} does not have a 'run' method")
+                result = tool_instance.run(query)
+                if result:
+                    return str(result)
                 
         except Exception as e:
-            tool_results.append(f"Error using {tool_name}: {str(e)}")
+            return f"Error: {str(e)}"
     
-    # If we get here, no tool was successful
-    return "\n".join(tool_results) if tool_results else "Error: No tools were successfully applied"
+    return "Error: No suitable tool found to process the query"
 
-def process_query_with_tools(query: str) -> ProcessResult:
-    try:
-        steps = []
-        
-        # Step 0: User Query
-        steps.append({"step": "User Query", "details": query})
-        
-        try:
-            # Step 1: Determine required tools
-            steps.append({"step": "Determine required tools", "details": "Analyzing query to identify necessary tools."})
-            required_tools = get_required_tools(query)
-            if not required_tools:
-                return ProcessResult(
-                    steps=steps,
-                    final_answer="Error: Could not determine required tools"
-                )
-            steps.append({"step": "Required tools identified", "details": f"Tools needed: {', '.join(required_tools)}"})
-            
-            # Step 2: Check for missing tools
-            existing_tools = tool_manager.list_tools()
-            missing_tools = [tool for tool in required_tools if tool not in existing_tools]
-            steps.append({"step": "Check for missing tools", 
-                         "details": f"Currently available tools: {', '.join(existing_tools)}\nMissing tools: {', '.join(missing_tools) if missing_tools else 'None'}"})
-            
-            # Step 3: Construct missing tools
-            if missing_tools:
-                steps.append({"step": "Construct missing tools", 
-                             "details": f"Attempting to create: {', '.join(missing_tools)}"})
-                api_requirement = construct_missing_tools(missing_tools)
-                if api_requirement:
-                    return ProcessResult(
-                        steps=steps,
-                        final_answer=f"Tool creation requires API key: {api_requirement['message']}",
-                        needs_api_key=api_requirement
-                    )
-            
-            # Step 4: Use tools
-            steps.append({"step": "Use tools", "details": f"Using tools: {', '.join(required_tools)}"})
-            result = use_tools(query, required_tools)
-            
-            return ProcessResult(steps=steps, final_answer=result)
-            
-        except Exception as e:
-            return ProcessResult(
-                steps=steps,
-                final_answer=f"Error during processing: {str(e)}"
-            )
-            
-    except Exception as e:
-        return ProcessResult(
-            steps=[{"step": "Error", "details": f"Critical error: {str(e)}"}],
-            final_answer="Failed to process query due to system error"
-        )
+def process_query_with_tools(query: str) -> Dict[str, Any]:
+    steps = []
+    
+    # Step 1: Record the user query
+    steps.append({"details": query})
+    
+    # Step 2: Determine required tools
+    steps.append({"details": "Analyzing query to identify necessary tools."})
+    required_tools = get_required_tools(query)
+    
+    # Step 3: Check for missing tools
+    steps.append({"details": f"Tools needed: {', '.join(required_tools)}"})
+    
+    # Initialize tool manager
+    available_tools = tool_manager.list_tools()
+    missing_tools = [tool for tool in required_tools if tool not in available_tools]
+    
+    # Step 4: Construct missing tools if needed
+    if missing_tools:
+        steps.append({
+            "details": f"Currently available tools: {', '.join(available_tools)} "
+                      f"Missing tools: {', '.join(missing_tools)}"
+        })
+        construct_missing_tools(missing_tools)
+    
+    # Step 5: Use tools
+    steps.append({
+        "details": f"Using tools to process query: {query}"
+    })
+    
+    # Use the tools to process the query
+    final_answer = use_tools(query, required_tools)
+    
+    return {
+        "steps": steps,
+        "final_answer": final_answer
+    }
