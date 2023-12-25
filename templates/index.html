@@ -10,20 +10,45 @@
         input[type="text"] { width: 70%; padding: 10px; }
         input[type="submit"] { padding: 10px 20px; }
         pre { background-color: #f0f0f0; padding: 10px; white-space: pre-wrap; word-wrap: break-word; }
+        .step { margin-bottom: 15px; border: 1px solid #ddd; padding: 10px; border-radius: 5px; }
+        .step-title { font-weight: bold; color: #333; }
+        .step-details { margin-top: 5px; color: #666; }
     </style>
 </head>
 <body>
     <h1>LLM Query Processor</h1>
     <form method="post">
-        <input type="text" name="query" placeholder="Enter your query here" required>
-        <input type="submit" value="Submit">
+        <input type="text" name="query" placeholder="Enter your task or query here" required>
+        <input type="submit" value="Process">
     </form>
     {% if result %}
-    <h2>Result:</h2>
-    <h3>Reasoning:</h3>
-    <pre>{{ result.reasoning }}</pre>
-    <h3>Answer:</h3>
-    <pre>{{ result.answer }}</pre>
+    <h2>Processing Steps:</h2>
+    <div class="step">
+        <div class="step-title">1. User Query:</div>
+        <div class="step-details">{{ result.steps[0].details }}</div>
+    </div>
+    <div class="step">
+        <div class="step-title">2. Determine Required Tools:</div>
+        <div class="step-details">{{ result.steps[1].details }}</div>
+    </div>
+    <div class="step">
+        <div class="step-title">3. Check for Missing Tools:</div>
+        <div class="step-details">{{ result.steps[2].details }}</div>
+    </div>
+    {% if result.steps | length > 4 %}
+    <div class="step">
+        <div class="step-title">4. Construct Missing Tools:</div>
+        <div class="step-details">{{ result.steps[3].details }}</div>
+    </div>
+    {% endif %}
+    <div class="step">
+        <div class="step-title">5. Use Tools:</div>
+        <div class="step-details">{{ result.steps[-2].details }}</div>
+    </div>
+    <div class="step">
+        <div class="step-title">6. Final Answer:</div>
+        <div class="step-details">{{ result.final_answer }}</div>
+    </div>
     {% endif %}
 </body>
 </html>

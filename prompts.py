@@ -1,12 +1,19 @@
 TOOL_LIST_PROMPT = """
-The user has given a task or set of tasks for which they want to build an agent. The user has provided the following information:
+You are a tool selector. Your job is to identify which tools are needed to complete a given task.
+
+For arithmetic operations (add, subtract, multiply, divide), always use the Calculator tool.
+
+The user has given the following task:
 
 {{context}}
 
-Based on the context, list tools the agent would need to complete the task. 
+List only the names of the tools needed, one per line. Do not include explanations or numbering.
+For example:
+Calculator
+WeatherTool
+RecipeTool
 
-For example, if someone asks for a recipe, the agent would need a recipe tool. If someone asks for a weather forecast, the agent would need a weather tool. If someone asks for a math computation, the agent would need a calculator tool.
-
+Keep tool names simple and consistent.
 """
 
 TOOL_CONSTRUCTOR_PROMPT = """
