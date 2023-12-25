@@ -4,7 +4,7 @@ import os
 from pydantic import BaseModel
 from groq import Groq
 from dotenv import load_dotenv
-import math
+from tools import CalculatorTool, tools
 
 load_dotenv()
 
@@ -14,64 +14,6 @@ groq = Groq(api_key=os.getenv("GROQ_API_KEY"))
 class ReasonedResponse(BaseModel):
     reasoning: str
     answer: str
-
-class CalculatorTool:
-    name = "Calculator"
-    description = ("Use this tool to perform basic arithmetic operations. "
-                   "Supported operations: addition (+), subtraction (-), "
-                   "multiplication (*), division (/), exponentiation (**), "
-                   "and modulo (%). Provide the expression as a string.")
-
-    @staticmethod
-    def run(expression: str) -> float:
-        try:
-            # Use a safe eval function to calculate the result
-            result = eval(expression, {"__builtins__": None}, {"math": math})
-            return float(result)
-        except Exception as e:
-            return f"Error: {str(e)}"
-
-# Define tools after the CalculatorTool class
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "provide_reasoned_response",
-            "description": "Provide a response with reasoning and a final answer",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "reasoning": {
-                        "type": "string",
-                        "description": "The step-by-step reasoning or thought process",
-                    },
-                    "answer": {
-                        "type": "string",
-                        "description": "The final concise answer",
-                    },
-                },
-                "required": ["reasoning", "answer"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "calculator",
-            "description": CalculatorTool.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "expression": {
-                        "type": "string",
-                        "description": "The arithmetic expression to evaluate",
-                    },
-                },
-                "required": ["expression"],
-            },
-        },
-    }
-]
 
 def get_llm_response(prompt: str) -> ReasonedResponse:
     chat_completion = groq.chat.completions.create(
