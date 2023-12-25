@@ -49,11 +49,7 @@ def check_for_api_key_requirement(code: str) -> Dict[str, str]:
     return None
 
 def get_required_tools(query: str) -> List[str]:
-    # For arithmetic operations, always return Calculator
-    if any(op in query.lower() for op in ['add', 'subtract', 'multiply', 'divide', 'compute', '+', '-', '*', '/', 'sqrt', 'square root']):
-        return ["Calculator"]
-    
-    # For other queries, ask the LLM
+    # Ask the LLM what tools are needed
     prompt = TOOL_LIST_PROMPT.replace("{{context}}", query)
     response = groq.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
@@ -67,11 +63,11 @@ def get_required_tools(query: str) -> List[str]:
     for line in content.split('\n'):
         line = line.strip()
         if line and not line.startswith(('Based on', 'This tool', 'These tools')):
-            # Only add tools we know how to handle
-            if line.lower() in ['calculator', 'weathertool', 'internettool']:
+            # Only add valid tool names
+            if line in ['Calculator', 'WeatherTool', 'TimeTool', 'NoTool']:
                 tools.append(line)
     
-    return tools if tools else ["Calculator"]  # Default to Calculator if no valid tools found
+    return tools if tools else ["NoTool"]  # Default to NoTool if no valid tools found
 
 def construct_missing_tools(missing_tools: List[str]) -> Dict[str, str]:
     for tool in missing_tools:
@@ -79,34 +75,75 @@ def construct_missing_tools(missing_tools: List[str]) -> Dict[str, str]:
         response = groq.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model="llama3-8b-8192",
-            temperature=0.7,
+            temperature=0.1,
             max_tokens=2048,
         )
-        tool_code = response.choices[0].message.content
+        tool_code = response.choices[0].message.content.strip()
         
-        # Extract the Python code from the response
-        code_start = tool_code.find("```python")
-        code_end = tool_code.rfind("```")
-        if code_start != -1 and code_end != -1:
-            tool_code = tool_code[code_start+9:code_end].strip()
+        # Extract the Python code between the markers
+        start_marker = "# Start of Example Code File #"
+        end_marker = "# End of Example Code File #"
+        
+        start_idx = tool_code.find(start_marker)
+        end_idx = tool_code.find(end_marker)
+        
+        if start_idx == -1 or end_idx == -1:
+            print(f"Invalid response format. Response: {tool_code}")
+            return {
+                'service': tool,
+                'message': "Error: Invalid response format from LLM"
+            }
             
-            # Check if tool requires API key
-            api_requirement = check_for_api_key_requirement(tool_code)
-            if api_requirement:
-                return api_requirement
+        # Extract just the code between the markers
+        tool_code = tool_code[start_idx + len(start_marker):end_idx].strip()
+        
+        try:
+            # Execute the code to get the class definition
+            namespace = {}
+            exec(tool_code, namespace)
+            
+            # Find the tool class in the namespace
+            tool_class = None
+            for item in namespace.values():
+                if isinstance(item, type) and hasattr(item, 'name') and item.name == tool:
+                    tool_class = item
+                    break
+            
+            if not tool_class:
+                return {
+                    'service': tool,
+                    'message': "Error: Could not find tool class in generated code"
+                }
+            
+            # Check for required APIs
+            if hasattr(tool_class, 'required_apis') and tool_class.required_apis:
+                api_keys = load_api_keys()
+                missing_apis = [api for api in tool_class.required_apis if api not in api_keys]
+                if missing_apis:
+                    return {
+                        'service': tool,
+                        'message': f"This tool requires the following API keys: {', '.join(missing_apis)}. Please provide them.",
+                        'required_apis': missing_apis
+                    }
             
             # Replace API key placeholders with actual keys if available
             api_keys = load_api_keys()
-            for service, key in api_keys.items():
-                tool_code = tool_code.replace(f'YOUR_{service.upper()}_API_KEY', key)
+            for api_name, key in api_keys.items():
+                tool_code = tool_code.replace(f'YOUR_{api_name}', key)
         
-        try:
+            # Add the tool to the manager
             tool_manager.add_tool_from_code(tool_code)
+            print(f"Successfully added tool: {tool}")
+            return None
+            
         except Exception as e:
+            print(f"Error constructing tool: {str(e)}")
+            print(f"Problematic code:\n{tool_code}")
             return {
                 'service': tool,
-                'message': f"Error creating tool: {str(e)}\nGenerated code had issues: {tool_code}"
+                'message': f"Error creating tool: {str(e)}"
             }
+    
     return None
 
 def use_tools(query: str, tools: List[str]) -> str:
@@ -121,43 +158,50 @@ def use_tools(query: str, tools: List[str]) -> str:
                 # Extract numbers and basic operations
                 import re
                 # Clean up the query
-                clean_query = query.lower().replace('compute', '').replace('calculate', '').strip()
+                clean_query = query.lower().replace('what', '').replace('whats', '').replace('what\'s', '')
+                clean_query = clean_query.replace('compute', '').replace('calculate', '').strip()
                 
                 # For square root
                 if "sqrt" in clean_query or "square root" in clean_query:
                     return str(tool_instance.run(clean_query))
                 
                 # For basic arithmetic
-                # First, try to evaluate the entire expression
-                try:
-                    return str(tool_instance.run(clean_query))
-                except:
-                    # If that fails, try to parse it piece by piece
-                    numbers = re.findall(r'-?\d+\.?\d*', clean_query)
-                    operations = re.findall(r'[\+\-\*\/]', clean_query)
-                    
-                    if not numbers:
-                        return "Error: No numbers found in query"
-                    
-                    if len(numbers) == 1:
-                        return numbers[0]
-                    
-                    if not operations:
-                        return "Error: No operation found in query"
-                    
-                    expression = numbers[0]
-                    for i, op in enumerate(operations):
-                        if i + 1 < len(numbers):
-                            expression += f"{op}{numbers[i+1]}"
-                    
-                    result = tool_instance.run(expression)
-                    return str(result)
+                # First, try to extract numbers and operations
+                numbers = re.findall(r'-?\d+\.?\d*', clean_query)
+                operations = re.findall(r'[\+\-\*\/]', clean_query)
+                
+                if not numbers:
+                    return "Error: No numbers found in query"
+                
+                if len(numbers) == 1:
+                    return numbers[0]
+                
+                if not operations:
+                    return "Error: No operation found in query"
+                
+                # Construct the expression
+                expression = numbers[0]
+                for i, op in enumerate(operations):
+                    if i + 1 < len(numbers):
+                        expression += f"{op}{numbers[i+1]}"
+                
+                result = tool_instance.run(expression)
+                return str(result)
             
             # Handle other tools
             else:
-                result = tool_instance.run(query)
-                if result:
-                    return str(result)
+                # Check if the run method expects a query parameter
+                import inspect
+                sig = inspect.signature(tool_instance.run)
+                if len(sig.parameters) > 1:  # More than just self
+                    result = tool_instance.run(query)
+                else:
+                    result = tool_instance.run()
+                    
+                if isinstance(result, dict):
+                    # Format dictionary results nicely
+                    return "\n".join(f"{k}: {v}" for k, v in result.items())
+                return str(result)
                 
         except Exception as e:
             return f"Error: {str(e)}"
@@ -171,28 +215,35 @@ def process_query_with_tools(query: str) -> Dict[str, Any]:
     steps.append({"details": query})
     
     # Step 2: Determine required tools
-    steps.append({"details": "Analyzing query to identify necessary tools."})
     required_tools = get_required_tools(query)
+    steps.append({"details": f"Required tools: {', '.join(required_tools)}"})
     
-    # Step 3: Check for missing tools
-    steps.append({"details": f"Tools needed: {', '.join(required_tools)}"})
-    
-    # Initialize tool manager
+    # Step 3: Check tool availability
     available_tools = tool_manager.list_tools()
     missing_tools = [tool for tool in required_tools if tool not in available_tools]
     
-    # Step 4: Construct missing tools if needed
     if missing_tools:
         steps.append({
-            "details": f"Currently available tools: {', '.join(available_tools)} "
-                      f"Missing tools: {', '.join(missing_tools)}"
+            "details": f"Available tools: {', '.join(available_tools)}\n"
+                      f"Need to construct: {', '.join(missing_tools)}"
         })
-        construct_missing_tools(missing_tools)
+        
+        # Step 4: Construct missing tools
+        construct_result = construct_missing_tools(missing_tools)
+        if construct_result:
+            # If there was an error or API key requirement
+            steps.append({"details": f"Construction error: {construct_result['message']}"})
+        else:
+            # Successfully constructed tools
+            steps.append({
+                "details": f"Successfully constructed: {', '.join(missing_tools)}\n"
+                          f"Now available: {', '.join(tool_manager.list_tools())}"
+            })
+    else:
+        steps.append({"details": f"All required tools are available: {', '.join(required_tools)}"})
     
     # Step 5: Use tools
-    steps.append({
-        "details": f"Using tools to process query: {query}"
-    })
+    steps.append({"details": f"Processing query using {', '.join(required_tools)}"})
     
     # Use the tools to process the query
     final_answer = use_tools(query, required_tools)

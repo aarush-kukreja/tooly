@@ -27,6 +27,32 @@
             margin: 5px 0; 
             font-size: 0.9em; 
         }
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .message {
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .query {
+            background-color: #e3f2fd;
+        }
+        .response {
+            background-color: #f5f5f5;
+        }
+        .step {
+            margin: 5px 0;
+            padding: 5px;
+        }
+        .api-key-form {
+            background-color: #fff3e0;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
@@ -38,39 +64,39 @@
         <p>By combining the LLM's reasoning capabilities with purpose-built tools (like our Calculator), we can achieve more reliable and accurate results than relying on the LLM alone.</p>
     </div>
 
-    <form method="post">
-        <input type="text" name="query" placeholder="Enter your task or query here" required>
-        <div class="suggestion">Try asking: "What is 235 * 18 + 442?" or "Calculate the square root of 169"</div>
-        <input type="submit" value="Process">
-    </form>
-    {% if result %}
-    <h2>Processing Steps:</h2>
-    <div class="step">
-        <div class="step-title">1. User Query:</div>
-        <div class="step-details">{{ result.steps[0].details }}</div>
+    <div class="chat-container">
+        <form method="post">
+            <input type="text" name="query" placeholder="Enter your task or query here" required>
+            <input type="submit" value="Process">
+        </form>
+
+        {% if pending_api_keys %}
+        <div class="api-key-form">
+            <p>Please provide your {{ pending_api_keys[0] }} API key to continue:</p>
+            <form method="post">
+                <input type="text" name="api_key" placeholder="Enter API key" required>
+                <input type="submit" value="Submit API Key">
+            </form>
+            <small>Your API key will be saved securely for future use.</small>
+        </div>
+        {% endif %}
+
+        {% if chat_history %}
+        <h2>Chat History:</h2>
+        {% for message in chat_history %}
+        <div class="message query">
+            <strong>Query:</strong> {{ message.query }}
+        </div>
+        <div class="message response">
+            <strong>Processing Steps:</strong>
+            {% for step in message.result.steps %}
+            <div class="step">{{ step.details }}</div>
+            {% endfor %}
+            <strong>Final Answer:</strong>
+            <div class="step">{{ message.result.final_answer }}</div>
+        </div>
+        {% endfor %}
+        {% endif %}
     </div>
-    <div class="step">
-        <div class="step-title">2. Determine Required Tools:</div>
-        <div class="step-details">{{ result.steps[1].details }}</div>
-    </div>
-    <div class="step">
-        <div class="step-title">3. Check for Missing Tools:</div>
-        <div class="step-details">{{ result.steps[2].details }}</div>
-    </div>
-    {% if result.steps | length > 4 %}
-    <div class="step">
-        <div class="step-title">4. Construct Missing Tools:</div>
-        <div class="step-details">{{ result.steps[3].details }}</div>
-    </div>
-    {% endif %}
-    <div class="step">
-        <div class="step-title">5. Use Tools:</div>
-        <div class="step-details">{{ result.steps[-2].details }}</div>
-    </div>
-    <div class="step">
-        <div class="step-title">6. Final Answer:</div>
-        <div class="step-details">{{ result.final_answer }}</div>
-    </div>
-    {% endif %}
 </body>
 </html>
