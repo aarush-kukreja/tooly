@@ -2,6 +2,8 @@
 
 This project is a web application that processes user queries using a Large Language Model (LLM) and provides reasoned responses. It includes a calculator tool for arithmetic operations and can be extended with additional tools.
 
+We use Groq, and llama3-8b-8192. 
+
 ## Features
 
 - Web interface for submitting queries
