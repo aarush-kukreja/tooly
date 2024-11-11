@@ -1,16 +1,60 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import os
 from pydantic import BaseModel
 from groq import Groq
+import google.generativeai as genai
 from dotenv import load_dotenv
 from tools import ToolManager, CalculatorTool
 from prompts import TOOL_LIST_PROMPT, TOOL_CONSTRUCTOR_PROMPT
 
 load_dotenv()
 
+# Initialize LLM clients
 groq = Groq(api_key=os.getenv("GROQ_API_KEY"))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+# Gemini model configuration
+GEMINI_CONFIG = {
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "top_k": 40,
+    "max_output_tokens": 8192,
+}
+
+gemini_model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash",
+    generation_config=GEMINI_CONFIG,
+)
+
 tool_manager = ToolManager()
+
+# Add new LLM interface class
+class LLMInterface:
+    def __init__(self, provider: str = "groq"):
+        self.provider = provider.lower()
+        
+    async def get_completion(self, prompt: str, temperature: Optional[float] = None) -> str:
+        try:
+            if self.provider == "groq":
+                response = groq.chat.completions.create(
+                    messages=[{"role": "user", "content": prompt}],
+                    model="llama3-8b-8192",
+                    temperature=temperature or 0.7,
+                    max_tokens=1024,
+                )
+                return response.choices[0].message.content
+                
+            elif self.provider == "gemini":
+                chat = gemini_model.start_chat(history=[])
+                response = chat.send_message(prompt)
+                return response.text
+                
+            else:
+                raise ValueError(f"Unsupported LLM provider: {self.provider}")
+        except Exception as e:
+            print(f"Error in get_completion: {str(e)}")
+            raise
 
 # Load API keys from a JSON file
 def load_api_keys() -> Dict[str, str]:
@@ -48,36 +92,25 @@ def check_for_api_key_requirement(code: str) -> Dict[str, str]:
             }
     return None
 
-def get_required_tools(query: str) -> List[str]:
-    # Ask the LLM what tools are needed
+async def get_required_tools(query: str, llm_provider: str = "groq") -> List[str]:
+    llm = LLMInterface(llm_provider)
     prompt = TOOL_LIST_PROMPT.replace("{{context}}", query)
-    response = groq.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model="llama3-8b-8192",
-        temperature=0.7,
-        max_tokens=1024,
-    )
+    content = await llm.get_completion(prompt)
     
-    content = response.choices[0].message.content
     tools = []
     for line in content.split('\n'):
         line = line.strip()
         if line and not line.startswith(('Based on', 'This tool', 'These tools')):
-            # Add any tool name mentioned by the LLM
             tools.append(line)
     
-    return tools if tools else ["NoTool"]  # Default to NoTool if no valid tools found
+    return tools if tools else ["NoTool"]
 
-def construct_missing_tools(missing_tools: List[str]) -> Dict[str, str]:
+async def construct_missing_tools(missing_tools: List[str], llm_provider: str = "groq") -> Dict[str, str]:
+    llm = LLMInterface(llm_provider)
+    
     for tool in missing_tools:
         prompt = TOOL_CONSTRUCTOR_PROMPT.replace("{{context}}", f"Tool to construct: {tool}")
-        response = groq.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="llama3-8b-8192",
-            temperature=0.1,
-            max_tokens=2048,
-        )
-        tool_code = response.choices[0].message.content.strip()
+        tool_code = await llm.get_completion(prompt, temperature=0.1)
         
         # Extract the Python code between the markers
         start_marker = "# Start of Example Code File #"
@@ -207,14 +240,16 @@ def use_tools(query: str, tools: List[str]) -> str:
     
     return "Error: No suitable tool found to process the query"
 
-def process_query_with_tools(query: str) -> Dict[str, Any]:
+async def process_query_with_tools(query: str, llm_provider: str = "groq") -> Dict[str, Any]:
     steps = []
     
-    # Step 1: Record the user query
-    steps.append({"details": query})
+    # Step 1: Record the user query and LLM provider
+    steps.append({
+        "details": f"Query: {query}\nUsing LLM: {llm_provider}"
+    })
     
     # Step 2: Determine required tools
-    required_tools = get_required_tools(query)
+    required_tools = await get_required_tools(query, llm_provider)
     steps.append({"details": f"Required tools: {', '.join(required_tools)}"})
     
     # Step 3: Check tool availability
@@ -228,7 +263,7 @@ def process_query_with_tools(query: str) -> Dict[str, Any]:
         })
         
         # Step 4: Construct missing tools
-        construct_result = construct_missing_tools(missing_tools)
+        construct_result = await construct_missing_tools(missing_tools, llm_provider)
         if construct_result:
             # If there was an error or API key requirement
             steps.append({"details": f"Construction error: {construct_result['message']}"})

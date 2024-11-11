@@ -37,44 +37,36 @@ async def home(request: Request):
         }
     )
 
-@app.post("/", response_class=HTMLResponse)
+@app.post("/process")
 async def process_query(
-    request: Request, 
+    request: Request,
     query: str = Form(...),
-    api_key: Optional[str] = Form(None)
+    llm_provider: str = Form(default="groq")
 ):
-    if api_key and chat_history.pending_api_keys:
-        # Save the provided API key
-        service = chat_history.pending_api_keys[0]
-        save_api_key(service, api_key)
-        chat_history.clear_pending_api_keys()
-        # Reprocess the last query
-        if chat_history.messages:
-            last_query = chat_history.messages[-1]["query"]
-            result = process_query_with_tools(last_query)
-        else:
-            result = {"error": "No previous query found"}
-    else:
-        result = process_query_with_tools(query)
-        
-    # Check if we need API keys
-    if result.get("needs_api_key"):
-        chat_history.set_pending_api_keys([result["needs_api_key"]["service"]])
-    
-    # Add to chat history
-    chat_history.add_message({
-        "query": query,
-        "result": result
-    })
-
-    return templates.TemplateResponse(
-        "index.html", 
-        {
-            "request": request,
-            "chat_history": chat_history.messages,
-            "pending_api_keys": chat_history.pending_api_keys
-        }
-    )
+    try:
+        result = await process_query_with_tools(query, llm_provider)
+        chat_history.add_message({
+            "query": query,
+            "result": result
+        })
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "chat_history": chat_history.messages,
+                "pending_api_keys": chat_history.pending_api_keys
+            }
+        )
+    except Exception as e:
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "chat_history": chat_history.messages,
+                "pending_api_keys": chat_history.pending_api_keys,
+                "error": str(e)
+            }
+        )
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
