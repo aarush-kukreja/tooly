@@ -5,10 +5,14 @@ from fastapi.staticfiles import StaticFiles
 from llm_helper import process_query_with_tools, save_api_key
 import uvicorn
 from typing import Optional, List
+import os
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Only mount static files if the directory exists
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class ChatHistory:
     def __init__(self):
